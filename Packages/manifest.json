@@ -1,0 +1,22 @@
+{
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1",
+    "com.unity.postprocessing": "3.3.0",
+    "com.unity.render-pipelines.universal": "14.0.9",
+    "com.unity.sdk.linux-x86_64": "1.0.2",
+    "com.unity.textmeshpro": "3.0.6",
+    "com.unity.toolchain.linux-x86_64-linux": "1.0.2",
+    "com.unity.xr.interaction.toolkit": "2.5.2",
+    "com.unity.xr.management": "4.4.0",
+    "com.unity.xr.openxr": "1.9.1"
+  },
+  "scopedRegistries": [
+    {
+      "name": "OpenUPM",
+      "url": "https://package.openupm.com",
+      "scopes": [
+        "com.meta.xr"
+      ]
+    }
+  ]
+}

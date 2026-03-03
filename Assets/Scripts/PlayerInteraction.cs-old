@@ -1,0 +1,243 @@
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.XR;
+using UnityEngine.XR.Interaction.Toolkit;
+
+/// <summary>
+/// Gerencia a interacao do jogador com os itens de lixo.
+/// Suporta:
+/// - Meta Quest: XR Ray Interactor (trigger do controlador)
+/// - Editor PC: Raycast com o mouse (para testes)
+/// </summary>
+public class PlayerInteraction : MonoBehaviour
+{
+    [Header("Configuracao de Interacao")]
+    [Tooltip("Distancia maxima de interacao em metros.")]
+    public float interactionDistance = 4f;
+
+    [Tooltip("Layer dos objetos interagiveis (TrashItem).")]
+    public LayerMask interactableLayer;
+
+    [Header("VR - Input Actions")]
+    [Tooltip("Input Action para selecionar/interagir (trigger direito).")]
+    public InputActionReference selectActionRight;
+
+    [Tooltip("Input Action para selecionar/interagir (trigger esquerdo).")]
+    public InputActionReference selectActionLeft;
+
+    [Header("Feedback Visual - Crosshair")]
+    [Tooltip("Crosshair/reticle que aparece ao mirar em um item.")]
+    public GameObject crosshair;
+
+    [Tooltip("Cor do crosshair ao mirar em item interagivel.")]
+    public Color crosshairHighlightColor = Color.yellow;
+
+    [Tooltip("Cor padrao do crosshair.")]
+    public Color crosshairNormalColor = Color.white;
+
+    [Header("Audio")]
+    [Tooltip("Som ao coletar um item de lixo.")]
+    public AudioClip collectSound;
+
+    // ─── PRIVADO ─────────────────────────────────────────────
+    private Camera _mainCamera;
+    private AudioSource _audioSource;
+    private TrashItem _currentHighlighted;
+    private UnityEngine.UI.Image _crosshairImage;
+
+    // ─── INICIALIZACAO ────────────────────────────────────────
+    void Start()
+    {
+        _mainCamera = Camera.main;
+
+        _audioSource = GetComponent<AudioSource>();
+        if (_audioSource == null)
+            _audioSource = gameObject.AddComponent<AudioSource>();
+
+        _audioSource.spatialBlend = 0f; // Audio 2D para o jogador
+        _audioSource.playOnAwake = false;
+
+        // Crosshair
+        if (crosshair != null)
+            _crosshairImage = crosshair.GetComponent<UnityEngine.UI.Image>();
+
+        // Registra input actions do VR
+        if (selectActionRight != null)
+            selectActionRight.action.performed += OnSelectPerformed;
+
+        if (selectActionLeft != null)
+            selectActionLeft.action.performed += OnSelectPerformed;
+    }
+
+    void OnDestroy()
+    {
+        if (selectActionRight != null)
+            selectActionRight.action.performed -= OnSelectPerformed;
+        if (selectActionLeft != null)
+            selectActionLeft.action.performed -= OnSelectPerformed;
+    }
+
+    // ─── UPDATE ───────────────────────────────────────────────
+    void Update()
+    {
+        HandleHighlight();
+
+#if UNITY_EDITOR
+        // Interacao via mouse no Editor (para testes sem headset)
+        if (Input.GetMouseButtonDown(0))
+            TryInteract();
+#endif
+    }
+
+    // ─── HIGHLIGHT ────────────────────────────────────────────
+
+    /// <summary>
+    /// Destaca visualmente o item de lixo que o jogador esta mirando.
+    /// </summary>
+    void HandleHighlight()
+    {
+        Ray ray = GetInteractionRay();
+        bool hitSomething = Physics.Raycast(ray, out RaycastHit hit,
+                                             interactionDistance, interactableLayer);
+
+        TrashItem newTarget = null;
+
+        if (hitSomething)
+        {
+            newTarget = hit.collider.GetComponent<TrashItem>();
+        }
+
+        // Muda highlight se o alvo mudou
+        if (newTarget != _currentHighlighted)
+        {
+            if (_currentHighlighted != null)
+                _currentHighlighted.SetHighlight(false);
+
+            _currentHighlighted = newTarget;
+
+            if (_currentHighlighted != null)
+                _currentHighlighted.SetHighlight(true);
+        }
+
+        // Atualiza cor do crosshair
+        UpdateCrosshair(newTarget != null && !GameManager.Instance.HasHeldItem());
+    }
+
+    void UpdateCrosshair(bool canInteract)
+    {
+        if (_crosshairImage == null) return;
+        _crosshairImage.color = canInteract ? crosshairHighlightColor : crosshairNormalColor;
+    }
+
+    // ─── INPUT CALLBACK VR ────────────────────────────────────
+
+    void OnSelectPerformed(InputAction.CallbackContext ctx)
+    {
+        TryInteract();
+    }
+
+    // ─── INTERACAO ────────────────────────────────────────────
+
+    /// <summary>
+    /// Tenta coletar um item de lixo ou depositar na lixeira.
+    /// </summary>
+    void TryInteract()
+    {
+        // Se ja esta segurando um item, o deposito eh feito automaticamente
+        // via OnTriggerEnter na RecycleBin quando o jogador se aproxima.
+        // Aqui apenas gerenciamos a coleta.
+        if (GameManager.Instance.HasHeldItem())
+        {
+            // Opcional: cancelar coleta com outro clique
+            // Descomentar para ativar:
+            // DropHeldItem();
+            return;
+        }
+
+        Ray ray = GetInteractionRay();
+
+        if (Physics.Raycast(ray, out RaycastHit hit, interactionDistance, interactableLayer))
+        {
+            TrashItem trash = hit.collider.GetComponent<TrashItem>();
+
+            if (trash != null && !trash.isCollected)
+            {
+                CollectItem(trash);
+            }
+        }
+    }
+
+    void CollectItem(TrashItem trash)
+    {
+        trash.Collect();
+
+        // Som de coleta
+        if (collectSound != null)
+            _audioSource.PlayOneShot(collectSound);
+
+        // Limpa highlight pois o item foi coletado
+        _currentHighlighted = null;
+
+        Debug.Log($"[EcoPark] Jogador coletou: {trash.name}");
+    }
+
+    // ─── DEPOSITO MANUAL (botao de acao) ─────────────────────
+
+    /// <summary>
+    /// Deposita manualmente o item segurado ao pressionar um botao de acao.
+    /// Use quando o jogador pressiona o botao proximo a uma lixeira.
+    /// (Alternativa ao OnTriggerEnter automatico)
+    /// </summary>
+    public void TryDepositAtNearestBin()
+    {
+        if (!GameManager.Instance.HasHeldItem()) return;
+
+        RecycleBin[] bins = FindObjectsOfType<RecycleBin>();
+        RecycleBin nearest = null;
+        float nearestDist = float.MaxValue;
+
+        foreach (var bin in bins)
+        {
+            float dist = Vector3.Distance(transform.position, bin.transform.position);
+            if (dist < nearestDist)
+            {
+                nearestDist = dist;
+                nearest = bin;
+            }
+        }
+
+        // Deposita se estiver perto o suficiente (2.5 metros)
+        if (nearest != null && nearestDist <= 2.5f)
+        {
+            // Simula o trigger manualmente
+            TrashItem held = GameManager.Instance.GetHeldItem();
+            nearest.SendMessage("ProcessDeposit", held, SendMessageOptions.DontRequireReceiver);
+        }
+        else
+        {
+            GameManager.Instance.ShowFeedback("Chegar mais perto de uma lixeira!", false);
+        }
+    }
+
+    // ─── UTILITARIOS ─────────────────────────────────────────
+
+    /// <summary>
+    /// Retorna o Ray de interacao:
+    /// - Em VR: centro da tela / controlador
+    /// - No Editor: posicao do mouse
+    /// </summary>
+    Ray GetInteractionRay()
+    {
+#if UNITY_EDITOR
+        if (!Application.isEditor || UnityEngine.XR.XRSettings.isDeviceActive)
+        {
+            return new Ray(_mainCamera.transform.position,
+                           _mainCamera.transform.forward);
+        }
+        return _mainCamera.ScreenPointToRay(Input.mousePosition);
+#else
+        return new Ray(_mainCamera.transform.position,
+                       _mainCamera.transform.forward);
+#endif
+    }
+}
