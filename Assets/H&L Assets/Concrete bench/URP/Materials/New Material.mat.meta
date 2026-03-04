@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 3e2c21c5df1d31246a52c9d8f00900c5
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 324983
+  packageName: Concrete bench
+  packageVersion: 1.0
+  assetPath: Assets/H&L Assets/Concrete bench/URP/Materials/New Material.mat
+  uploadId: 768506

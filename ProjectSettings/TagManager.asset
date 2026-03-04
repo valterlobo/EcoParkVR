@@ -6,6 +6,7 @@ TagManager:
   tags:
   - TrashItem
   - RecycleBin
+  - scoreText
   layers:
   - Default
   - TransparentFX

@@ -167,7 +167,7 @@ public class EcoParkSceneBuilder : EditorWindow
         xrOrigin.transform.position = new Vector3(0, 0, 0);
 
         // Camera Offset
-        GameObject camOffset = new GameObject("Camera Offset");
+        GameObject camOffset = new GameObject("Camera Floor Offset");
         camOffset.transform.parent = xrOrigin.transform;
         camOffset.transform.localPosition = new Vector3(0, 1.6f, 0);
 
@@ -181,6 +181,10 @@ public class EcoParkSceneBuilder : EditorWindow
 
         // Audio Listener na camera
         camGO.AddComponent<AudioListener>();
+
+        // TrackedPoseDriver — atualiza posicao/rotacao da camera pelo headset XR
+        // Tenta adicionar via reflection para nao exigir using direto do InputSystem
+        TryAddTrackedPoseDriver(camGO);
 
         // PlayerInteraction na camera
         PlayerInteraction pi = camGO.AddComponent<PlayerInteraction>();
@@ -610,13 +614,16 @@ public class EcoParkSceneBuilder : EditorWindow
     // ─── GAME MANAGER ─────────────────────────────────────────
     void BuildGameManager(GameObject parent)
     {
+        // TrackedPoseDriverSetup — garante que a camera e rastreada pelo headset
+        // Adicionado no root para rodar antes do XROrigin.Awake()
+        parent.AddComponent<TrackedPoseDriverSetup>();
+
         GameObject gmGO = new GameObject("GameManager");
         gmGO.transform.parent = parent.transform;
         gmGO.AddComponent<GameManager>();
 
         // Adiciona o UIAutoWirer — vincula tudo automaticamente
         UIAutoWirer wirer = gmGO.AddComponent<UIAutoWirer>();
-        wirer.autoWireOnAwake = true;
         wirer.verbose = true;
 
         // Executa a vinculação imediatamente no Editor
@@ -668,5 +675,40 @@ public class EcoParkSceneBuilder : EditorWindow
             }
         }
     }
+
+    /// <summary>
+    /// Adiciona TrackedPoseDriver na camera usando reflection.
+    /// Funciona com InputSystem instalado (via dependencia do OpenXR)
+    /// sem precisar de using direto no arquivo.
+    /// </summary>
+    static void TryAddTrackedPoseDriver(GameObject camGO)
+    {
+        // Tenta UnityEngine.InputSystem.XR.TrackedPoseDriver (Input System 1.x)
+        System.Type tpdType =
+            System.Type.GetType("UnityEngine.InputSystem.XR.TrackedPoseDriver, Unity.InputSystem") ??
+            System.Type.GetType("UnityEngine.InputSystem.XR.TrackedPoseDriver, UnityEngine.InputSystem") ??
+            System.Type.GetType("UnityEngine.SpatialTracking.TrackedPoseDriver, UnityEngine.SpatialTracking");
+
+        if (tpdType != null)
+        {
+            var tpd = camGO.AddComponent(tpdType);
+
+            // Tenta configurar trackingType = RotationAndPosition (0)
+            var trackingProp = tpdType.GetProperty("trackingType");
+            if (trackingProp != null)
+            {
+                var enumVal = System.Enum.ToObject(trackingProp.PropertyType, 0);
+                trackingProp.SetValue(tpd, enumVal);
+            }
+
+            Debug.Log("[EcoPark] TrackedPoseDriver adicionado: " + tpdType.FullName);
+        }
+        else
+        {
+            Debug.LogWarning("[EcoPark] TrackedPoseDriver nao encontrado. " +
+                "Adicione manualmente na Main Camera apos instalar o Meta XR SDK.");
+        }
+    }
+
 }
 #endif

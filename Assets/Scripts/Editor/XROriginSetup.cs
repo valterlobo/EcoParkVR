@@ -266,7 +266,7 @@ public static class XROriginSetup
         cc.radius = 0.3f;
 
         // Camera Offset
-        GameObject camOffset = CreateChild(xrOrigin, "Camera Offset");
+        GameObject camOffset = CreateChild(xrOrigin, "Camera Floor Offset");
         camOffset.transform.localPosition = new Vector3(0, 1.65f, 0);
 
         // Main Camera
@@ -316,7 +316,7 @@ public static class XROriginSetup
         cc.center = new Vector3(0, 0.9f, 0);
         cc.radius = 0.3f;
 
-        GameObject camOffset = CreateChild(player, "Camera Offset");
+        GameObject camOffset = CreateChild(player, "Camera Floor Offset");
         camOffset.transform.localPosition = new Vector3(0, 1.65f, 0);
 
         GameObject camGO = CreateChild(camOffset, "Main Camera");
